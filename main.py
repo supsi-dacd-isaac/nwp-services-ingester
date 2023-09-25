@@ -12,17 +12,16 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv())
 
 
-def get_open_meteo_data():
-    today = dt.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
-    end_date = today + dt.timedelta(days=5)
+def get_open_meteo_data(today, today_at_midnight):
+    end_date = today_at_midnight + dt.timedelta(days=5)
     url = 'https://ensemble-api.open-meteo.com/v1/ensemble?'
     signals = ['temperature_2m', 'precipitation', 'windspeed_10m',
                'shortwave_radiation', 'direct_radiation', 'diffuse_radiation']
     params = {'latitude': '45.86831460', 'longitude': '8.9767214', 'hourly': ','.join(signals),
-              'start_date': today.strftime('%Y-%m-%d'), 'end_date': end_date.strftime('%Y-%m-%d')}
+              'start_date': today_at_midnight.strftime('%Y-%m-%d'), 'end_date': end_date.strftime('%Y-%m-%d')}
 
     for ens in ('icon_seamless', 'ecmwf_ifs04'):
-        logging.info(f'sending request for {dt.date.today()}, ensemble {ens}')
+        logging.info(f'sending request for {today}, ensemble {ens}')
         params['models'] = ens
         req = requests.get(url, params)
         if req.status_code != 200:
@@ -31,22 +30,22 @@ def get_open_meteo_data():
 
         logging.info('request succeeded, saving dataframe into pickle')
 
-        d = prepare_openmeteo_data(ens, req.json())
+        d = prepare_openmeteo_data(ens, req.json(), today)
 
         open_meteo_source_dir = os.path.join('data', 'open-meteo')
         os.makedirs(open_meteo_source_dir, exist_ok=True)
         model_path = os.path.join(open_meteo_source_dir, ens)
         os.makedirs(model_path, exist_ok=True)
-        d.to_pickle(os.path.join(model_path, f'open_meteo_forecast_{ens}_{dt.date.today()}.pickle'))
+        d.to_pickle(os.path.join(model_path, f'open_meteo_forecast_{ens}_{today.date()}.pickle'))
 
         tags = ['lat', 'lon', 'step', 'ensemble'] + [tag for tag in d.columns if 'member' in tag]
         fields = [c for c in d.columns if c not in tags]
-        write_to_influx(d, tags, fields, 'open-meteo')
+        write_to_influx(d, tags, fields, 'openmeteo')
 
         return 0
 
 
-def prepare_openmeteo_data(ens, j):
+def prepare_openmeteo_data(ens, j, today):
     # flatten json: the structure returned by the API is something like
     # {
     #   lat: ...
@@ -69,15 +68,16 @@ def prepare_openmeteo_data(ens, j):
         # flatten the values for signals and time, add units to signals (not to members)
         if 'hourly.' in c:
             col = c.replace('hourly.', '')
-            if 'member' not in c and not 'time' in c:
+            if 'member' not in c and 'time' not in c:
                 col = signals_w_units[col]
             d[col] = np.concatenate(df[c].values)
 
     d['lat'] = df['latitude'].iloc[0]
     d['lon'] = df['longitude'].iloc[0]
-    d['step'] = d.apply(lambda row: step_ahead(pd.Timestamp('today').replace(hour=0, minute=0, second=0, microsecond=0),
-                                               pd.to_datetime(row['time'])), axis=1)
+    d['step'] = d.apply(lambda row: step_ahead(today, pd.to_datetime(row['time'])), axis=1)
     d['ensemble'] = ens
+    d['time'] = today
+    d['step'] = d['step'].dt.total_seconds()
     d.set_index('time', inplace=True)
     return d
 
@@ -116,13 +116,13 @@ def delete_from_influx(start, stop, measurement):
     delete_api.delete(start, stop, f'_measurement={measurement}', bucket=bucket)
 
 
-def get_meteomatics_data():
+def get_meteomatics_data(today, today_at_midnight):
     logging.basicConfig(level=logging.DEBUG)
 
     username = os.getenv("METEOMATICS_USER")
     pwd = os.getenv("METEOMATICS_PWD")
 
-    coordinates, interval, mtop, steps = get_meteomatics_params()
+    coordinates, interval, mtop, steps, today = get_meteomatics_params(today, today_at_midnight)
     for idx, step in enumerate(steps):
         for model in mtop.keys():
             df = pd.DataFrame()
@@ -133,7 +133,7 @@ def get_meteomatics_data():
 
             logging.info(f'manipulatuing dataframe to prepare insertion into influxdb: ens {model}, step {idx}')
 
-            df = prepare_meteomatics_data(df, model)
+            df = prepare_meteomatics_data(df, model, today)
 
             meteomatics_source_dir = os.path.join('data', 'meteomatics')
             os.makedirs(meteomatics_source_dir, exist_ok=True)
@@ -150,7 +150,7 @@ def get_meteomatics_data():
             write_to_influx(df, tags, fields, 'meteomatics')
 
 
-def prepare_meteomatics_data(df, model):
+def prepare_meteomatics_data(df, model, today):
     # remove interval ref from signals columns
     for c in df.columns:
         prefix = 'rad' if '_rad' in c else c.split(':')[0][:-3]
@@ -158,25 +158,25 @@ def prepare_meteomatics_data(df, model):
         df[col] = df[c]
         df = df.drop(c, axis=1)
     df.reset_index(inplace=True)
-    df['validdate'] = df.apply(lambda row: row.validdate.replace(tzinfo=None), axis=1)
     # add step column
-    df['step'] = df.apply(lambda row: step_ahead(dt.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0), row.validdate.replace(tzinfo=None)),
-                          axis=1)
+    df['runtime'] = today
+    df['step'] = df.apply(lambda row: step_ahead(today, row.validdate.replace(tzinfo=None)), axis=1)
+    df['step'] = df['step'].dt.total_seconds()
+    df = df.drop('validdate', axis=1)
 
-    df = df.set_index('validdate')
+    df = df.set_index('runtime')
     df['ensemble'] = model
     return df
 
 
-def get_meteomatics_params():
+def get_meteomatics_params(today, today_at_midnight):
     coordinates = [(45.8683146, 8.9767214)]
-    today = dt.datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
     # we get forecast every 5min for the first day, then use 1h interval
     interval = [dt.timedelta(minutes=5), dt.timedelta(hours=1)]
     mtop = {
         'dwd-icon-eu': {
-            'start_date': [today, today + dt.timedelta(days=1)],
-            'end_date': [today + dt.timedelta(days=1), today + dt.timedelta(days=5)],
+            'start_date': [today, today_at_midnight + dt.timedelta(days=1)],
+            'end_date': [today_at_midnight + dt.timedelta(days=1), today_at_midnight + dt.timedelta(days=5)],
             'parameters': {
                 '5min': ['diffuse_rad_5min:Wh', 'direct_rad_5min:Wh', 'global_rad_5min:Wh', 't_mean_2m_1h:C',
                          'precip_5min:mm'],
@@ -184,8 +184,8 @@ def get_meteomatics_params():
             }
         },
         'ecmwf-ifs': {
-            'start_date': [today, today + dt.timedelta(days=1)],
-            'end_date': [today + dt.timedelta(days=1), today + dt.timedelta(days=7)],
+            'start_date': [today, today_at_midnight + dt.timedelta(days=1)],
+            'end_date': [today_at_midnight + dt.timedelta(days=1), today_at_midnight + dt.timedelta(days=7)],
             'parameters': {
                 '5min': ['diffuse_rad_5min:Wh', 'direct_rad_5min:Wh', 'global_rad_5min:Wh', 't_mean_2m_1h:C',
                          'wind_speed_mean_FL10_1h:kmh', 'precip_5min:mm'],
@@ -195,16 +195,21 @@ def get_meteomatics_params():
         }
     }
     steps = ['5min', '1h']
-    return coordinates, interval, mtop, steps
+    return coordinates, interval, mtop, steps, today
 
 
-def step_ahead(start_date, timestamp):
-    return str(timestamp - start_date)
+def step_ahead(today, timestamp):
+    if today > timestamp:
+        return today - timestamp
+
+    return timestamp - today
 
 
 def main():
-    get_meteomatics_data()
-    exit(get_open_meteo_data())
+    today = dt.datetime.now().replace(second=0, microsecond=0)
+    today_at_midnight = today.replace(hour=0, minute=0, second=0, microsecond=0)
+    # get_meteomatics_data(today, today_at_midnight)
+    exit(get_open_meteo_data(today, today_at_midnight))
 
 
 if __name__ == "__main__":
