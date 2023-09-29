@@ -1,6 +1,6 @@
 {
   "sampling_intervals": {
-    "open_meteo": 1
+    "open_meteo": 60
   },
   "locations": [
     {
