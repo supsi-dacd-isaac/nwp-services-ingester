@@ -39,8 +39,9 @@ services:
       context: .
       dockerfile: Dockerfile_data_collection
     volumes:
-      - ./conf/conf.json:/app/conf.json
+      - ./conf/conf.json:/app/conf/conf.json
       - ./logs:/app/logs
+      - ./data:/app/data
     depends_on:
       influxdb:
         condition: service_healthy
