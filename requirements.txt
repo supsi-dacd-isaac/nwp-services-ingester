@@ -1,0 +1,6 @@
+meteomatics
+numpy
+pandas
+influxdb-client
+requests
+python-dotenv

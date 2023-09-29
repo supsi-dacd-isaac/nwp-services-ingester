@@ -1,0 +1,12 @@
+{
+  "sampling_intervals": {
+    "open_meteo": 1
+  },
+  "locations": [
+    {
+      "name": "SUPSI Mendrisio",
+      "latitude": 45.86831460,
+      "longitude": 8.9767214
+    }
+  ]
+}

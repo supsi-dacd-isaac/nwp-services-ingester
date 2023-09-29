@@ -1,0 +1,60 @@
+version: '3.6'
+services:
+  influxdb:
+    image: influxdb:2.7.1-alpine
+    container_name: influxdb
+    restart: always
+    ports:
+      - '8087:8086'
+    volumes:
+      - influxdb:/var/lib/influxdb2
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 30s # check every 30 seconds
+      timeout: 10s # time out after 10 seconds
+      retries: 5 # retry 5 times before declaring failure
+  grafana:
+    image: grafana/grafana
+    container_name: grafana-server
+    restart: always
+    depends_on:
+      - influxdb
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=
+    links:
+      - influxdb
+    ports:
+      - '3001:3000'
+    volumes:
+      - grafana_conf:/etc/grafana
+      - grafana_data:/var/lib/grafana
+  data_collection:
+    image: data_collection
+    build:
+      context: .
+      dockerfile: Dockerfile_data_collection
+    volumes:
+      - ./conf/conf.json:/app/conf.json
+      - ./logs:/app/logs
+    depends_on:
+      influxdb:
+        condition: service_healthy
+
+volumes:
+  influxdb:
+    driver_opts:
+      type: none
+      o: bind
+      device: /ssd2/influxdb_docker/data
+  grafana_conf:
+    driver_opts:
+      type: none
+      o: bind
+      device: /ssd2/grafana_docker/conf
+  grafana_data:
+    driver_opts:
+      type: none
+      o: bind
+      device: /ssd2/grafana_docker/data
