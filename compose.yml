@@ -32,6 +32,9 @@ services:
       - grafana_data:/var/lib/grafana
   data_collection:
     image: data_collection
+    container_name: data_collection
+    restart: unless-stopped
+    user: "1000:1000"
     build:
       context: .
       dockerfile: Dockerfile_data_collection
