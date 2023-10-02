@@ -4,9 +4,26 @@ from dotenv import load_dotenv, find_dotenv
 import sched
 import time
 import json
-from open_meteo import get_open_meteo_data
+import pandas as pd
+from concurrent.futures import ThreadPoolExecutor
+from get_data_map import GET_DATA_MAP
 
 load_dotenv(find_dotenv())
+
+
+def get_meteo_data(interval, locations=None, service='open-meteo'):
+    dt = pd.Timestamp.utcnow().replace(second=0, microsecond=0).floor(f'{interval}s')
+    logging.info('getting open meteo data for dt %s' % dt)
+
+    if locations is None:
+        locations = [{'name': 'SUPSI Mendrisio', 'latitude': 45.86831460, 'longitude': 8.9767214}]
+
+    get_data_fun = GET_DATA_MAP[service]
+    max_workers = 4
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        executor.map(get_data_fun, locations, [dt] * len(locations))
+
+    logging.info(f'{service} data retrieved')
 
 
 def schedule_functions(funcs_with_intervals):
@@ -20,7 +37,7 @@ def schedule_functions(funcs_with_intervals):
     # Create a scheduler
     s = sched.scheduler(time.time, time.sleep)
 
-    for func, interval, locations in funcs_with_intervals:
+    for serv, interval, locations in funcs_with_intervals:
         interval *= 60  # Convert minutes to seconds
         # Get the current time
         current_time = time.time()
@@ -28,11 +45,17 @@ def schedule_functions(funcs_with_intervals):
         # Calculate delay: time until the next interval from epoch
         delay = interval - (current_time % interval)
 
-        def scheduled_function(sc, function_to_run, interval):
-            function_to_run(locations)
-            s.enter(interval, 1, scheduled_function, (sc, function_to_run, interval))
+        def scheduled_function(sc, service, interval):
+            start_time = time.time()
+            get_meteo_data(interval, locations, service)
+            next_time = start_time + interval  # Calculate the next start time based on current start time
+            delay = next_time - time.time()  # Time left to wait until next start time
+            if delay < 0:
+                logging.warning('Execution time exceeded interval by %s seconds' % abs(delay))
+                delay += interval * (abs(delay) // interval + 1)  # Calculate the next delay
+            s.enter(delay, 1, scheduled_function, (sc, service, interval))
 
-        s.enter(delay, 1, scheduled_function, (s, func, interval))
+        s.enter(delay, 1, scheduled_function, (s, serv, interval))
 
     s.run()
 
@@ -66,7 +89,7 @@ def main():
     # compose the list of functions to run with their intervals
     funcs_with_intervals = []
     for service, sampling_interval in conf['sampling_intervals'].items():
-        funcs_with_intervals.append((eval('get_'+service+'_data'), sampling_interval, conf['locations']))
+        funcs_with_intervals.append((service, sampling_interval, conf['locations']))
 
     schedule_functions(funcs_with_intervals)
 

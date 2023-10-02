@@ -4,21 +4,6 @@ import os
 import pandas as pd
 import requests
 from db_interface import write_to_influx
-from concurrent.futures import ThreadPoolExecutor
-
-
-def get_open_meteo_data(locations=None):
-    dt = pd.Timestamp.utcnow().replace(second=0, microsecond=0)
-    logging.info('getting open meteo data for dt %s' % dt)
-
-    if locations is None:
-        locations = [{'name': 'SUPSI Mendrisio', 'latitude': 45.86831460, 'longitude': 8.9767214}]
-
-    max_workers = 4
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        executor.map(get_open_meteo_data_single_location, locations, [dt] * len(locations))
-
-    logging.info('open-meteo data retrieved')
 
 
 def get_open_meteo_data_single_location(location: dict, dt: pd.Timestamp):
@@ -31,7 +16,7 @@ def get_open_meteo_data_single_location(location: dict, dt: pd.Timestamp):
               'start_date': dt_at_midnight.strftime('%Y-%m-%d'), 'end_date': end_date.strftime('%Y-%m-%d')}
 
     for ens in ('icon_seamless', 'ecmwf_ifs04'):
-        logging.info(f'sending request for {dt}, ensemble {ens}')
+        logging.info('sending request location: for {} time: {}, ensemble: {}'.format(location['name'], dt, ens))
         params['models'] = ens
         req = requests.get(url, params)
         if req.status_code != 200:
@@ -81,7 +66,7 @@ def prepare_openmeteo_data(ens, j, dt):
     df_base['latitude'] = df['latitude'].iloc[0]
     df_base['longitude'] = df['longitude'].iloc[0]
     df_base['elevation'] = df['elevation'].iloc[0]
-    df_base['ensemble'] = 'mean'
+    df_base['model'] = ens
 
     for c in df.columns:
         # flatten the values for signals and time, add units to signals (not to members)
