@@ -41,7 +41,7 @@ def get_meteomatics_data_single_location(location: dict, dt: pd.Timestamp, step:
             os.makedirs(model_path, exist_ok=True)
             d.to_pickle(os.path.join(model_path, f'meteomatics_{dt}_{step}-{model}.zip'))
 
-            tags = ['location', 'latitude', 'longitude', 'step', 'ensemble', 'member']
+            tags = ['location', 'latitude', 'longitude', 'step', 'model', 'member']
             write_to_influx(d, tags, f'meteomatics_{step}')
             logging.debug('data saved to db')
         except Exception as e:
