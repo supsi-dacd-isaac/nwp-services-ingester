@@ -34,7 +34,7 @@ def get_meteomatics_data_single_location(location: dict, dt: pd.Timestamp, step:
 
         try:
             d = prepare_meteomatics_data(df, model, dt)
-
+            d['location'] = location['name']
             meteomatics_source_dir = os.path.join('data', 'meteomatics')
             os.makedirs(meteomatics_source_dir, exist_ok=True)
             model_path = os.path.join(meteomatics_source_dir, model)
