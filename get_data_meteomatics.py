@@ -22,9 +22,8 @@ def get_meteomatics_data_single_location(location: dict, dt: pd.Timestamp, step:
 
     coordinates, interval, mtop = get_meteomatics_params(location, dt, step)
     for model in mtop.keys():
-        df = pd.DataFrame()
-        logging.info(
-            f'sending request for dates {mtop[model]["start_date"]} - {mtop[model]["end_date"]}, time interval {interval}')
+        logging.info('sending request location: for {} time: {}, model: {}, step: {}'.format(location['name'], dt, model, step))
+
         try:
             df = api.query_time_series(coordinates, mtop[model]["start_date"], mtop[model]["end_date"],
                                        interval, mtop[model]['parameters'][step], username, pwd, model, ens_select=mtop[model]['ens_select'] if 'ens_select' in mtop[model] else None)
