@@ -30,7 +30,7 @@ def get_meteomatics_data_single_location(location: dict, dt: pd.Timestamp, step:
         except Exception as e:
             logging.error(f'request failed with error {e}')
             continue
-        logging.info(f'manipulating dataframe to prepare insertion into influxdb: ens {model}, step {step}')
+        logging.debug(f'manipulating dataframe to prepare insertion into influxdb: ens {model}, step {step}')
 
         try:
             d = prepare_meteomatics_data(df, model, dt)
