@@ -51,14 +51,14 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: /ssd2/influxdb_docker/data
+      device: docker_volumes/influxdb
   grafana_conf:
     driver_opts:
       type: none
       o: bind
-      device: /ssd2/grafana_docker/conf
+      device: docker_volumes/grafana/conf
   grafana_data:
     driver_opts:
       type: none
       o: bind
-      device: /ssd2/grafana_docker/data
+      device: docker_volumes/grafana/data
