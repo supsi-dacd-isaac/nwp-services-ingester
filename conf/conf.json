@@ -1,8 +1,6 @@
 {
   "sampling_intervals": {
-    "open-meteo": 60,
-    "meteomatics-hourly": 60,
-    "meteomatics-nowcasting": 5
+    "open-meteo": 60
   },
   "locations": [
     {
