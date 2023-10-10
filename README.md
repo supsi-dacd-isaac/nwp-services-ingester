@@ -1,2 +1,2 @@
-# nwp-services-comparison
-NWP services comparison
+# nwp-services-ingester
+NWP services ingestion scripts
