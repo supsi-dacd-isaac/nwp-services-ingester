@@ -1,6 +1,15 @@
 {
-  "sampling_intervals": {
-    "open-meteo": 60
+  "services": {
+    "open-meteo": {
+      "sampling_interval": 60,
+      "locations": [
+        "SUPSI Mendrisio",
+        "Borkum",
+        "Peon",
+        "Hyperion",
+        "Minoan"
+      ]
+    }
   },
   "locations": [
     {

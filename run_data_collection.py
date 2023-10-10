@@ -7,7 +7,7 @@ import json
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 from get_data_map import GET_DATA_MAP
-
+from zipped_time_rotating_file_handler import ZippedTimedRotatingFileHandler
 load_dotenv(find_dotenv())
 
 
@@ -78,7 +78,7 @@ def main():
     logger.setLevel(log_level)
     logger.propagate = False
     if args.l is not None:
-        file_handler = logging.FileHandler(args.l)
+        file_handler = ZippedTimedRotatingFileHandler(args.l, when='midnight', interval=1, backupCount=1500)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
     stream_handler = logging.StreamHandler()
@@ -88,8 +88,9 @@ def main():
     logging.info('Starting data collection')
     # compose the list of functions to run with their intervals
     funcs_with_intervals = []
-    for service, sampling_interval in conf['sampling_intervals'].items():
-        funcs_with_intervals.append((service, sampling_interval, conf['locations']))
+    for service, service_dict in conf['services'].items():
+        locations = [location for location in conf['locations'] if location['name'] in service_dict['locations']]
+        funcs_with_intervals.append((service, service_dict['sampling_interval'], locations))
 
     schedule_functions(funcs_with_intervals)
 

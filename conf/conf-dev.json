@@ -1,12 +1,41 @@
 {
-  "sampling_intervals": {
-    "meteomatics-hourly": 1
+  "services": {
+    "open-meteo": {
+      "sampling_interval": 60,
+      "locations": [
+        "SUPSI Mendrisio",
+        "Borkum",
+        "Peon",
+        "Hyperion",
+        "Minoan"
+      ]
+    }
   },
   "locations": [
     {
       "name": "SUPSI Mendrisio",
       "latitude": 45.86831460,
       "longitude": 8.9767214
+    },
+    {
+      "name": "Borkum",
+      "latitude": 53.587777,
+      "longitude": 6.666880
+    },
+    {
+      "name": "Peon",
+      "latitude": 43.492614,
+      "longitude": -5.549348
+    },
+    {
+      "name": "Hyperion",
+      "latitude": 37.87669,
+      "longitude": 22.50556
+    },
+    {
+      "name": "Minoan",
+      "latitude": 35.133335,
+      "longitude": 25.269189
     }
   ]
 }
