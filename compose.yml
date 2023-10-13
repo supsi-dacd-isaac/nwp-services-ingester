@@ -5,7 +5,7 @@ services:
     container_name: influxdb
     restart: always
     ports:
-      - '8087:8086'
+      - '9000:8086'
     volumes:
       - influxdb:/var/lib/influxdb2
     healthcheck:
@@ -26,7 +26,7 @@ services:
     links:
       - influxdb
     ports:
-      - '3001:3000'
+      - '9001:3000'
     volumes:
       - grafana_conf:/etc/grafana
       - grafana_data:/var/lib/grafana
