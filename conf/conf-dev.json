@@ -1,7 +1,7 @@
 {
   "services": {
     "open-meteo": {
-      "sampling_interval": 60,
+      "sampling_interval": 1,
       "locations": [
         "SUPSI Mendrisio",
         "Borkum",

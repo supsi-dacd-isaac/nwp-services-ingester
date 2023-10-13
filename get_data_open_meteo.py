@@ -8,14 +8,15 @@ from db_interface import write_to_influx
 
 def get_open_meteo_data_single_location(location: dict, dt: pd.Timestamp):
     dt_at_midnight = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-    end_date = dt_at_midnight + datetime.timedelta(days=7)
+    end_dates = {'icon_seamless': dt_at_midnight + datetime.timedelta(days=7),
+                 'ecmwf_ifs04': dt_at_midnight + datetime.timedelta(days=5)}
     url = 'https://ensemble-api.open-meteo.com/v1/ensemble?'
     signals = ['temperature_2m', 'precipitation', 'windspeed_10m',
                'shortwave_radiation', 'direct_radiation', 'diffuse_radiation']
-    params = {'latitude': location['latitude'], 'longitude': location['longitude'], 'hourly': ','.join(signals),
-              'start_date': dt_at_midnight.strftime('%Y-%m-%d'), 'end_date': end_date.strftime('%Y-%m-%d')}
 
     for ens in ('icon_seamless', 'ecmwf_ifs04'):
+        params = {'latitude': location['latitude'], 'longitude': location['longitude'], 'hourly': ','.join(signals),
+                  'start_date': dt_at_midnight.strftime('%Y-%m-%d'), 'end_date': end_dates[ens].strftime('%Y-%m-%d')}
         logging.info('sending request location: for {} time: {}, model: {}'.format(location['name'], dt, ens))
         params['models'] = ens
         req = requests.get(url, params)
