@@ -34,7 +34,7 @@ def get_open_meteo_data_single_location(location: dict, dt: pd.Timestamp):
             d.to_pickle(os.path.join(model_path, f'open_meteo_forecast_{ens}_{dt}.zip'))
 
             tags = ['location', 'latitude', 'longitude', 'elevation', 'step', 'model', 'member']
-            #write_to_influx(d, tags, 'open-meteo')
+            write_to_influx(d, tags, 'open-meteo')
             logging.debug('data saved to db')
         except Exception as e:
             logging.error(f'error while processing openmeteo data: {e}')
