@@ -6,7 +6,7 @@ import requests
 from db_interface import write_to_influx
 
 
-def get_open_meteo_data_single_location(location: dict, dt: pd.Timestamp):
+def get_open_meteo_data_single_location(location: dict, dt: pd.Timestamp, save_to_file=False, save_to_db=True):
     dt_at_midnight = dt.replace(hour=0, minute=0, second=0, microsecond=0)
     end_date = dt_at_midnight + datetime.timedelta(days=7)
     url = 'https://ensemble-api.open-meteo.com/v1/ensemble?'
@@ -26,16 +26,22 @@ def get_open_meteo_data_single_location(location: dict, dt: pd.Timestamp):
 
         try:
             d = prepare_openmeteo_data(ens, req.json(), dt)
-            d['location'] = location['name']
-            open_meteo_source_dir = os.path.join('data', 'open-meteo')
-            os.makedirs(open_meteo_source_dir, exist_ok=True)
-            model_path = os.path.join(open_meteo_source_dir, ens)
-            os.makedirs(model_path, exist_ok=True)
-            d.to_pickle(os.path.join(model_path, f'open_meteo_forecast_{ens}_{dt}.zip'))
+            location_name = location['name']
+            d['location'] = location_name
 
-            tags = ['location', 'latitude', 'longitude', 'elevation', 'step', 'model', 'member']
-            write_to_influx(d, tags, 'open-meteo')
-            logging.debug('data saved to db')
+            if save_to_file:
+                open_meteo_source_dir = os.path.join('data', 'open-meteo')
+                os.makedirs(open_meteo_source_dir, exist_ok=True)
+                model_path = os.path.join(open_meteo_source_dir, ens)
+                os.makedirs(model_path, exist_ok=True)
+                location_name_file_save = location_name.replace(' ', '_')
+                d.to_pickle(os.path.join(model_path, f'open_meteo_forecast_{ens}_{location_name_file_save}_{dt}.zip'))
+                logging.debug('data saved to pickle')
+            
+            if save_to_db:
+                tags = ['location', 'latitude', 'longitude', 'elevation', 'step', 'model', 'member']
+                write_to_influx(d, tags, 'open-meteo')
+                logging.debug('data saved to db')
         except Exception as e:
             logging.error(f'error while processing openmeteo data: {e}')
 

@@ -11,7 +11,7 @@ from zipped_time_rotating_file_handler import ZippedTimedRotatingFileHandler
 load_dotenv(find_dotenv())
 
 
-def get_meteo_data(interval, locations=None, service='open-meteo'):
+def get_meteo_data(interval, locations=None, service='open-meteo', save_to_file=False, save_to_db=True):
     dt = pd.Timestamp.utcnow().replace(second=0, microsecond=0).floor(f'{interval}s')
     logging.info(f'getting {service} data for dt {dt}')
 
@@ -21,7 +21,7 @@ def get_meteo_data(interval, locations=None, service='open-meteo'):
     get_data_fun = GET_DATA_MAP[service]
     max_workers = 4
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        executor.map(get_data_fun, locations, [dt] * len(locations))
+        executor.map(get_data_fun, locations, [dt] * len(locations), [save_to_file] * len(locations), [save_to_db] * len(locations))
 
     logging.info(f'{service} data retrieved')
 
@@ -37,7 +37,7 @@ def schedule_functions(funcs_with_intervals):
     # Create a scheduler
     s = sched.scheduler(time.time, time.sleep)
 
-    for serv, interval, locations in funcs_with_intervals:
+    for serv, interval, locations, save_to_file, save_to_db in funcs_with_intervals:
         interval *= 60  # Convert minutes to seconds
         # Get the current time
         current_time = time.time()
@@ -46,7 +46,7 @@ def schedule_functions(funcs_with_intervals):
         next_time = current_time + delay  # Calculate the next start time based on delay
 
         def scheduled_function(sc, start_time, service, interval):
-            get_meteo_data(interval, locations, service)
+            get_meteo_data(interval, locations, service, save_to_file, save_to_db)
             next_time = start_time + interval  # Calculate the next start time based on current start time
             delay = next_time - time.time()  # Time left to wait until next start time
             if delay < 0:
@@ -88,9 +88,11 @@ def main():
     logging.info('Starting data collection')
     # compose the list of functions to run with their intervals
     funcs_with_intervals = []
+    save_to_file = conf['save_options']['save_to_file']
+    save_to_db = conf['save_options']['save_to_db']
     for service, service_dict in conf['services'].items():
         locations = [location for location in conf['locations'] if location['name'] in service_dict['locations']]
-        funcs_with_intervals.append((service, service_dict['sampling_interval'], locations))
+        funcs_with_intervals.append((service, service_dict['sampling_interval'], locations, save_to_file, save_to_db))
 
     schedule_functions(funcs_with_intervals)
 

@@ -11,6 +11,10 @@
       ]
     }
   },
+  "save_options": {
+    "save_to_file": true,
+    "save_to_db": true
+  },
   "locations": [
     {
       "name": "SUPSI Mendrisio",

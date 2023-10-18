@@ -6,15 +6,16 @@ import meteomatics.api as api
 from typing import Union
 from db_interface import write_to_influx
 
-def get_meteomatics_data_single_location_nowcasting(location: dict, dt: pd.Timestamp):
-    return get_meteomatics_data_single_location(location, dt, step='5min')
+
+def get_meteomatics_data_single_location_nowcasting(location: dict, dt: pd.Timestamp, save_to_file=False, save_to_db=True):
+    return get_meteomatics_data_single_location(location, dt, step='5min', save_to_file=save_to_file, save_to_db=save_to_db)
 
 
-def get_meteomatics_data_single_location_hourly(location: dict, dt: pd.Timestamp):
-    return get_meteomatics_data_single_location(location, dt, step='1h')
+def get_meteomatics_data_single_location_hourly(location: dict, dt: pd.Timestamp, save_to_file=False, save_to_db=True):
+    return get_meteomatics_data_single_location(location, dt, step='1h', save_to_file=save_to_file, save_to_db=save_to_db)
 
 
-def get_meteomatics_data_single_location(location: dict, dt: pd.Timestamp, step: Union[int, str]):
+def get_meteomatics_data_single_location(location: dict, dt: pd.Timestamp, step: Union[int, str], save_to_file=False, save_to_db=True):
     logging.basicConfig(level=logging.DEBUG)
 
     username = os.getenv("METEOMATICS_USER")
@@ -34,16 +35,22 @@ def get_meteomatics_data_single_location(location: dict, dt: pd.Timestamp, step:
 
         try:
             d = prepare_meteomatics_data(df, model, dt)
-            d['location'] = location['name']
-            meteomatics_source_dir = os.path.join('data', 'meteomatics')
-            os.makedirs(meteomatics_source_dir, exist_ok=True)
-            model_path = os.path.join(meteomatics_source_dir, model)
-            os.makedirs(model_path, exist_ok=True)
-            d.to_pickle(os.path.join(model_path, f'meteomatics_{dt}_{step}-{model}.zip'))
+            location_name = location['name']
+            d['location'] = location_name
 
-            tags = ['location', 'latitude', 'longitude', 'step', 'model', 'member']
-            write_to_influx(d, tags, f'meteomatics_{step}')
-            logging.debug('data saved to db')
+            if save_to_file:
+                meteomatics_source_dir = os.path.join('data', 'meteomatics')
+                os.makedirs(meteomatics_source_dir, exist_ok=True)
+                model_path = os.path.join(meteomatics_source_dir, model)
+                os.makedirs(model_path, exist_ok=True)
+                location_name_file_save = location_name.replace(' ', '_')
+                d.to_pickle(os.path.join(model_path, f'meteomatics_{model}_{step}_{location_name_file_save}_{dt}.zip'))
+                logging.debug('data saved to pickle')
+                
+            if save_to_db:
+                tags = ['location', 'latitude', 'longitude', 'step', 'model', 'member']
+                write_to_influx(d, tags, f'meteomatics_{step}')
+                logging.debug('data saved to db')
         except Exception as e:
             logging.error(f'error while processing meteomatics data: {e}')
 
