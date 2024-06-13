@@ -3,6 +3,9 @@
     "open-meteo": {
       "sampling_interval": 60,
       "locations": [
+        "Lugano",
+        "Massagno",
+        "Tesserete",
         "SUPSI Mendrisio",
         "Borkum",
         "Peon",
@@ -16,6 +19,21 @@
     "save_to_db": true
   },
   "locations": [
+    {
+      "name": "Lugano",
+      "latitude": 46.01211291930487,
+      "longitude": 8.960967063881549
+    },
+    {
+      "name": "Massagno",
+      "latitude": 46.01253752435191,
+      "longitude": 8.943394030574025
+    },
+    {
+      "name": "Tesserete",
+      "latitude": 46.0640625,
+      "longitude": 8.9569602
+    },
     {
       "name": "SUPSI Mendrisio",
       "latitude": 45.86831460,
