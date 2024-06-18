@@ -3,6 +3,7 @@ import logging
 import os
 import pandas as pd
 import requests
+from time import sleep
 from db_interface import write_to_influx
 
 
@@ -18,11 +19,25 @@ def get_open_meteo_data_single_location(location: dict, dt: pd.Timestamp, save_t
     for ens in ('icon_seamless', 'ecmwf_ifs04'):
         logging.info('sending request location: for {} time: {}, model: {}'.format(location['name'], dt, ens))
         params['models'] = ens
-        req = requests.get(url, params)
-        if req.status_code != 200:
-            logging.error(f'request failed with status code {req.status_code}, reason {req.reason}')
+        # try to get the data from the API 3 times before giving up
+        for i in range(3):
+            logging.debug('Request attempt {}'.format(i + 1))
+            try:
+                req = requests.get(url, params=params)
+                if req.status_code != 200:
+                    logging.error('Request failed with status code {}, reason {}'.format(req.status_code, req.reason))
+                    logging.debug('Response content: {}'.format(req.text))
+                    sleep(10)
+                    continue
+                logging.debug('Request succeeded, saving dataframe into pickle')
+                break
+            except requests.RequestException as e:
+                logging.error('Request encountered an exception: {}'.format(e))
+                sleep(10)
+                continue
+        else:
+            logging.error('request failed 3 times, giving up')
             continue
-        logging.debug('request succeeded, saving dataframe into pickle')
 
         try:
             d = prepare_openmeteo_data(ens, req.json(), dt)
