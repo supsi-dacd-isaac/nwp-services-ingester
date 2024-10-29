@@ -131,7 +131,7 @@ Defines a custom log handler that compresses log files based on time intervals, 
 
 ## Acknowledgments
 
-This project received funding by the European Union under the Horizon Europe Framework Programme, Grant Agreement No. 101104154, as part of the DR-RISE Horizon Europe project.
+This project received funding by the European Union under the Horizon Europe Framework Programme, Grant Agreement No. 101104154, as part of the DR-RISE Horizon Europe project. The Swiss partner contributions have been funded by the Swiss State Secretariat for Education, Research, and Innovation (SERI).
 
 ## Contributing
 
