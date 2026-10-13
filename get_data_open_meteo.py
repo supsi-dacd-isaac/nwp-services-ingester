@@ -27,13 +27,13 @@ def get_open_meteo_data_single_location(location: dict, dt: pd.Timestamp, save_t
                 if req.status_code != 200:
                     logging.error('Request for location {}, time {}, model {}, attempt {}, failed with status code {}, reason {}'.format(location['name'], dt, ens, i+1, req.status_code, req.reason))
                     logging.debug('Response content: {}'.format(req.text))
-                    sleep(10)
+                    sleep(60)
                     continue
                 logging.debug('Request succeeded, saving dataframe into pickle')
                 break
             except requests.RequestException as e:
                 logging.error('Request encountered an exception: {}'.format(e))
-                sleep(10)
+                sleep(60)
                 continue
         else:
             logging.error('request failed 3 times, giving up')

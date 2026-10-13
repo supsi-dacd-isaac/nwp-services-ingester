@@ -4,10 +4,9 @@
       "sampling_interval": 60,
       "locations": [
         "Lugano",
-        "Massagno",
         "Tesserete",
         "SUPSI Mendrisio",
-        "Borkum",
+        "Amsterdam",
         "Peon",
         "Hyperion",
         "Minoan"
@@ -40,9 +39,9 @@
       "longitude": 8.9767214
     },
     {
-      "name": "Borkum",
-      "latitude": 53.587777,
-      "longitude": 6.666880
+      "name": "Amsterdam",
+      "latitude": 52.394744,
+      "longitude": 4.905986
     },
     {
       "name": "Peon",

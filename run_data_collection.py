@@ -85,7 +85,7 @@ def main():
     stream_handler.setFormatter(formatter)
     logger.addHandler(stream_handler)
 
-    logging.info('Starting data collection')
+    logging.info('Starting NWP data collection')
     # compose the list of functions to run with their intervals
     funcs_with_intervals = []
     save_to_file = conf['save_options']['save_to_file']
