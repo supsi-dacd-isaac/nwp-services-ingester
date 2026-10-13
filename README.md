@@ -23,7 +23,7 @@ This repository contains a data ingestion tool to retrieve weather forecast data
    ```
 
 2. **Install Dependencies:**
-   Make sure you have Python 3.7+ and install required packages:
+   Make sure you have Python 3.10+ and install required packages:
    ```bash
    pip install -r requirements.txt
    ```
@@ -43,6 +43,39 @@ python run_data_collection.py -c <path_to_configuration_file> -l <log_file>
 ```
 
 This command will start the data retrieval process based on the configuration provided.
+
+### Open-Meteo primary model and fallback
+
+For each location and acquisition time, the ingester first requests `icon_seamless`.
+It requests `ecmwf_ifs025_ensemble` only if ICON is unavailable or its response is
+unusable. A successful ICON acquisition ends collection for that location; the
+two models are not collected routinely together. Stored files and database tags
+always identify the model actually used.
+
+Transport errors, HTTP 429 and server errors are retried up to three times with
+60 seconds between attempts and a 10-second connection / 60-second read timeout.
+Invalid HTTP 200 responses, including all-null forecasts, go directly to the
+fallback without retries. Every requested variable must have at least one finite
+value at or after the acquisition time. Gaps at the end of a model's forecast
+horizon are allowed; nonfinite values are omitted from storage.
+
+Storage failures are reported as failures without switching weather models.
+Each collection cycle logs the selected models and any failed locations, including
+exceptions raised by worker threads. The retired `ecmwf_ifs04` model is no longer
+queried; existing historical records are retained.
+
+The six direct dependency versions in `requirements.txt` match the existing
+dev02 deployment so rebuilding does not upgrade them implicitly.
+
+### Tests
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+These tests mock HTTP requests and database writes. They cover primary selection,
+fallback, retry limits, empty and malformed responses, forecast gaps, storage
+failures, and the collection summary without contacting production services.
 
 ## Configuration
 

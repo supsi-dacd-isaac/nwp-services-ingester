@@ -5,7 +5,8 @@ import sched
 import time
 import json
 import pandas as pd
-from concurrent.futures import ThreadPoolExecutor
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from get_data_map import GET_DATA_MAP
 from zipped_time_rotating_file_handler import ZippedTimedRotatingFileHandler
 load_dotenv(find_dotenv())
@@ -20,10 +21,32 @@ def get_meteo_data(interval, locations=None, service='open-meteo', save_to_file=
 
     get_data_fun = GET_DATA_MAP[service]
     max_workers = 4
+    failed_locations = []
+    models = Counter()
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        executor.map(get_data_fun, locations, [dt] * len(locations), [save_to_file] * len(locations), [save_to_db] * len(locations))
+        futures = {executor.submit(get_data_fun, location, dt, save_to_file, save_to_db): location
+                   for location in locations}
+        for future in as_completed(futures):
+            location_name = futures[future]['name']
+            try:
+                model = future.result()
+            except Exception:
+                logging.exception('%s acquisition raised an exception: location=%s', service, location_name)
+                failed_locations.append(location_name)
+                continue
+            if service == 'open-meteo':
+                if model is None:
+                    failed_locations.append(location_name)
+                else:
+                    models[model] += 1
 
-    logging.info(f'{service} data retrieved')
+    if failed_locations:
+        logging.error('%s collection incomplete: successful=%s/%s failed_locations=%s models=%s',
+                      service, len(locations) - len(failed_locations), len(locations),
+                      ', '.join(sorted(failed_locations)), dict(models))
+        return False
+    logging.info('%s data retrieved: locations=%s models=%s', service, len(locations), dict(models))
+    return True
 
 
 def schedule_functions(funcs_with_intervals):

@@ -1,46 +1,96 @@
 import datetime
 import logging
 import os
+import numpy as np
 import pandas as pd
 import requests
 from time import sleep
 from db_interface import write_to_influx
 
 
+MODELS = ('icon_seamless', 'ecmwf_ifs025_ensemble')
+SIGNALS = ('temperature_2m', 'precipitation', 'windspeed_10m',
+           'shortwave_radiation', 'direct_radiation', 'diffuse_radiation')
+MAX_ATTEMPTS = 3
+RETRY_DELAY_SECONDS = 60
+REQUEST_TIMEOUT = (10, 60)
+
+
+def request_open_meteo_forecast(url, params, location_name, dt):
+    """Retry transport and HTTP failures, but return HTTP 200 responses only once."""
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            response = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
+            if response.status_code == 200:
+                return response
+            logging.warning(
+                'Open-Meteo request failed: location=%s time=%s model=%s attempt=%s/%s HTTP=%s reason=%s',
+                location_name, dt, params['models'], attempt, MAX_ATTEMPTS,
+                response.status_code, response.reason)
+            logging.debug('Response content: %s', response.text[:500])
+            # Retrying an invalid query will not recover it.
+            if response.status_code != 429 and response.status_code < 500:
+                break
+        except requests.RequestException as exc:
+            logging.warning(
+                'Open-Meteo request failed: location=%s time=%s model=%s attempt=%s/%s error=%s',
+                location_name, dt, params['models'], attempt, MAX_ATTEMPTS, exc)
+        if attempt < MAX_ATTEMPTS:
+            sleep(RETRY_DELAY_SECONDS)
+    return None
+
+
+def prepare_valid_forecast(model, payload, dt):
+    """Require usable forecast values for every requested signal, not a full horizon."""
+    if not isinstance(payload, dict) or payload.get('error'):
+        raise ValueError('API response is not a forecast')
+    hourly = payload.get('hourly')
+    units = payload.get('hourly_units')
+    if not isinstance(hourly, dict) or not isinstance(units, dict):
+        raise ValueError('Missing hourly data or units')
+    if not isinstance(hourly.get('time'), list) or not hourly['time']:
+        raise ValueError('Empty or missing forecast time axis')
+    missing = [signal for signal in SIGNALS if signal not in hourly or signal not in units]
+    if missing:
+        raise ValueError('Missing signals: ' + ', '.join(missing))
+
+    data = prepare_openmeteo_data(model, payload, dt)
+    data['value'] = pd.to_numeric(data['value'], errors='coerce')
+    finite = np.isfinite(data['value'])
+    future = data.loc[finite & (data['step'] >= 0)]
+    available = set(future['signal'].str.split(':', n=1).str[0])
+    missing = set(SIGNALS) - available
+    if missing:
+        raise ValueError('No valid current/future values for: ' + ', '.join(sorted(missing)))
+    # Trailing gaps are normal when the requested window exceeds the model horizon.
+    return data.loc[finite].copy()
+
+
 def get_open_meteo_data_single_location(location: dict, dt: pd.Timestamp, save_to_file=False, save_to_db=True):
+    """Return the model successfully collected, or None if acquisition/storage failed."""
     dt_at_midnight = dt.replace(hour=0, minute=0, second=0, microsecond=0)
     end_date = dt_at_midnight + datetime.timedelta(days=7)
     url = 'https://ensemble-api.open-meteo.com/v1/ensemble?'
-    signals = ['temperature_2m', 'precipitation', 'windspeed_10m',
-               'shortwave_radiation', 'direct_radiation', 'diffuse_radiation']
-    params = {'latitude': location['latitude'], 'longitude': location['longitude'], 'hourly': ','.join(signals),
+    params = {'latitude': location['latitude'], 'longitude': location['longitude'], 'hourly': ','.join(SIGNALS),
               'start_date': dt_at_midnight.strftime('%Y-%m-%d'), 'end_date': end_date.strftime('%Y-%m-%d')}
 
-    for ens in ('icon_seamless', 'ecmwf_ifs04'):
+    for ens in MODELS:
         logging.info('sending request location: for {} time: {}, model: {}'.format(location['name'], dt, ens))
-        params['models'] = ens
-        # try to get the data from the API 3 times before giving up
-        for i in range(3):
-            logging.debug('Request attempt {}'.format(i + 1))
-            try:
-                req = requests.get(url, params=params)
-                if req.status_code != 200:
-                    logging.error('Request for location {}, time {}, model {}, attempt {}, failed with status code {}, reason {}'.format(location['name'], dt, ens, i+1, req.status_code, req.reason))
-                    logging.debug('Response content: {}'.format(req.text))
-                    sleep(60)
-                    continue
-                logging.debug('Request succeeded, saving dataframe into pickle')
-                break
-            except requests.RequestException as e:
-                logging.error('Request encountered an exception: {}'.format(e))
-                sleep(60)
-                continue
-        else:
-            logging.error('request failed 3 times, giving up')
+        req = request_open_meteo_forecast(url, dict(params, models=ens), location['name'], dt)
+        if req is None:
+            logging.warning('Open-Meteo model unavailable: location=%s model=%s', location['name'], ens)
             continue
 
         try:
-            d = prepare_openmeteo_data(ens, req.json(), dt)
+            d = prepare_valid_forecast(ens, req.json(), dt)
+        except (ValueError, KeyError, TypeError, IndexError) as exc:
+            # HTTP 200 responses are charged at full weight even if all values are null.
+            # Move to the fallback without requesting the same empty response again.
+            logging.warning('Unusable Open-Meteo forecast: location=%s model=%s error=%s',
+                            location['name'], ens, exc)
+            continue
+
+        try:
             location_name = location['name']
             d['location'] = location_name
 
@@ -57,8 +107,17 @@ def get_open_meteo_data_single_location(location: dict, dt: pd.Timestamp, save_t
                 tags = ['location', 'latitude', 'longitude', 'elevation', 'step', 'model', 'member']
                 write_to_influx(d, tags, 'open-meteo')
                 logging.debug('data saved to db')
-        except Exception as e:
-            logging.error(f'error while processing openmeteo data: {e}')
+        except Exception:
+            # A storage failure is not a reason to collect a different weather model.
+            logging.exception('Open-Meteo storage failed: location=%s model=%s', location['name'], ens)
+            return None
+
+        logging.info('Open-Meteo acquisition succeeded: location=%s model=%s fallback=%s values=%s',
+                     location['name'], ens, ens != MODELS[0], len(d))
+        return ens
+
+    logging.error('Open-Meteo acquisition failed: location=%s time=%s; no usable model', location['name'], dt)
+    return None
 
 
 def prepare_openmeteo_data(ens, j, dt):
